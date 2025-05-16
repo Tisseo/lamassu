@@ -20,12 +20,18 @@ package org.entur.lamassu.mapper.feedmapper.v3;
 
 import static org.entur.lamassu.mapper.feedmapper.IdMappers.PRICING_PLAN_ID_TYPE;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
+
 import org.entur.lamassu.mapper.feedmapper.AbstractFeedMapper;
 import org.entur.lamassu.mapper.feedmapper.IdMappers;
 import org.entur.lamassu.model.provider.FeedProvider;
+import org.mobilitydata.gbfs.v3_0.system_pricing_plans.GBFSDescription;
 import org.mobilitydata.gbfs.v3_0.system_pricing_plans.GBFSData;
+import org.mobilitydata.gbfs.v3_0.system_pricing_plans.GBFSName;
 import org.mobilitydata.gbfs.v3_0.system_pricing_plans.GBFSPlan;
 import org.mobilitydata.gbfs.v3_0.system_pricing_plans.GBFSSystemPricingPlans;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,10 +51,9 @@ public class V3SystemPricingPlansFeedMapper
     GBFSSystemPricingPlans source,
     FeedProvider feedProvider
   ) {
-    // TODO should we support custom pricing plans?
-    //if (feedProvider.getPricingPlans() != null) {
-    //  return customPricingPlans(feedProvider);
-    //}
+    if (feedProvider.getPricingPlans() != null) {
+      return customPricingPlans(feedProvider);
+    }
 
     if (
       source == null || source.getData() == null || source.getData().getPlans() == null
@@ -62,6 +67,46 @@ public class V3SystemPricingPlansFeedMapper
     mapped.setLastUpdated(source.getLastUpdated());
     mapped.setData(mapData(source.getData(), feedProvider));
     return mapped;
+  }
+
+
+  private GBFSSystemPricingPlans customPricingPlans(FeedProvider feedProvider) {
+    var custom = new GBFSSystemPricingPlans();
+    custom.setVersion(targetGbfsVersion);
+    custom.setLastUpdated(new Date());
+    custom.setTtl((int) Duration.ofMinutes(5).toSeconds());
+    var data = new GBFSData();
+    List<GBFSPlan> plans = convertPlans(feedProvider);
+    data.setPlans(plans);
+    custom.setData(mapData(data, feedProvider));
+    return custom;
+  }
+
+
+  private List<GBFSPlan> convertPlans(FeedProvider feedProvider) {
+    List<GBFSPlan> plans = new ArrayList<>();
+    for (org.mobilitydata.gbfs.v2_3.system_pricing_plans.GBFSPlan plan : feedProvider.getPricingPlans()) {
+        GBFSPlan newPlan = new GBFSPlan();
+        newPlan.setPlanId(plan.getPlanId());
+        newPlan.setCurrency(plan.getCurrency());
+        newPlan.setPrice(plan.getPrice());
+
+        List<GBFSDescription> descriptions = new ArrayList<>();
+        GBFSDescription newDescription = new GBFSDescription();
+        newDescription.setLanguage("fr");
+        newDescription.setText(plan.getDescription());
+        newPlan.setDescription(descriptions);
+
+        List<GBFSName> names = new ArrayList<>();
+        GBFSName newName = new GBFSName();
+        newName.setLanguage("fr");
+        newName.setText( plan.getName());
+        names.add(newName);
+        newPlan.setName(names);
+
+        plans.add(newPlan);
+    }
+    return plans;
   }
 
   private GBFSData mapData(GBFSData data, FeedProvider feedProvider) {
